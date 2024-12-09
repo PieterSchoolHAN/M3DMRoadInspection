@@ -1,10 +1,13 @@
+import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk
 import cv2
 from yolov7.seg.segment.custom_predict import run_inference, load_model
+from video_processing import process_video
 import json
 
 def annotate_image(image, detections):
@@ -24,7 +27,6 @@ def annotate_image(image, detections):
         cv2.putText(image, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     return image
-
 
 def annotate_images_batch(results):
     annotated_images = []
@@ -47,6 +49,7 @@ class YOLOv7App:
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill="both", expand=True)
 
+        # Existing Tabs
         self.main_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.main_frame, text="Main")
 
@@ -56,6 +59,11 @@ class YOLOv7App:
         self.gallery_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.gallery_frame, text="Gallery")
 
+        # New Video Processing Tab
+        self.video_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.video_frame, text="Video Processing")
+
+        # Main Tab Elements
         self.process_button = tk.Button(self.main_frame, text="Process Images", command=self.process_folder, state=tk.DISABLED)
         self.process_button.pack(pady=20)
 
@@ -78,6 +86,7 @@ class YOLOv7App:
         self.after_canvas = tk.Canvas(canvas_frame, bg="gray")
         self.after_canvas.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
+        # Settings Tab Elements
         self.input_folder_label = tk.Label(self.settings_frame, text="Input Folder:")
         self.input_folder_label.grid(row=0, column=0, padx=10, pady=5)
         self.input_folder_button = tk.Button(self.settings_frame, text="Select Input Folder", command=self.select_input_folder)
@@ -96,8 +105,20 @@ class YOLOv7App:
         self.output_folder = ""
         self.load_config()
 
+        self.video_input_label = tk.Label(self.video_frame, text="Select Video File:")
+        self.video_input_label.pack(pady=10)
+
+        self.video_input_button = tk.Button(self.video_frame, text="Select Video", command=self.select_video)
+        self.video_input_button.pack(pady=5)
+
+        self.video_process_button = tk.Button(self.video_frame, text="Process Video", command=self.process_video, state=tk.DISABLED)
+        self.video_process_button.pack(pady=20)
+
+        self.video_progress_bar = ttk.Progressbar(self.video_frame, length=900, mode="determinate")
+        self.video_progress_bar.pack(fill="x", padx=10, pady=10)
+
         self.root.bind("<Configure>", self.on_resize)
-        
+
         self.filter_frame = ttk.Frame(self.gallery_frame)
         self.filter_frame.pack(fill="x", padx=10, pady=5)
 
@@ -130,6 +151,40 @@ class YOLOv7App:
         self.calculate_images_per_row()
         print(self.images_per_row)
         self.check_existing_images()
+
+    def process_folder(self):
+        if not self.input_folder or not self.output_folder:
+            messagebox.showerror("Error", "Please select both input and output folders in the Settings tab.")
+            return
+
+        total_images = len(self.image_paths)
+        for idx, image_path in enumerate(self.image_paths):
+            self.display_image(image_path, "before")
+
+            results = run_inference(
+                model=self.model,
+                source=image_path,
+                conf_thres=0.5,
+                iou_thres=0.45
+            )
+
+            annotated_images_batch = annotate_images_batch(results)
+
+            for path, annotated_img in annotated_images_batch:
+                detections_folder = "detections" if results[0][1] is not None else "no_detections"
+                subfolder_path = os.path.join(self.output_folder, detections_folder)
+                os.makedirs(subfolder_path, exist_ok=True)
+
+                self.display_image(annotated_img, "after")
+
+                output_path = os.path.join(subfolder_path, os.path.basename(path))
+                cv2.imwrite(output_path, annotated_img)
+
+            self.progress_bar["value"] = (idx + 1) / total_images * 100
+            self.root.update_idletasks()
+            self.show_gallery_images()
+
+        messagebox.showinfo("Processing Complete", f"Processed images saved to {self.output_folder}.")
 
     def check_existing_images(self):
         """ Check the input and output folders for existing images and display them in the gallery. """
@@ -198,43 +253,49 @@ class YOLOv7App:
                 col = 0
                 row += 1
 
-    def calculate_images_per_row(self):
-        """Calculate the number of images that can fit in one row based on container width."""
-        self.state += 1
-        if self.state % 2 == 0:
-            self.images_per_row = 5
-        else: self.images_per_row = 11
-        print(self.images_per_row)
-        return
+    def select_video(self):
+        video_path = filedialog.askopenfilename(filetypes=[("Video Files", "*.mp4;*.avi;*.mov")])
+        if video_path:
+            self.video_input_file = video_path
 
-    def show_all_images(self):
-        """Display all images in the gallery."""
-        self.filtered_images = self.annotated_images
-        self.show_gallery_images()
+            # Extract the input folder and file name
+            input_folder = os.path.dirname(video_path)
+            input_filename = os.path.splitext(os.path.basename(video_path))[0]
 
-    def filter_with_detections(self):
-        """Filter and display images with detections."""
-        detections_folder = os.path.join(self.output_folder, "detections")
-        detection_images = {f for f in os.listdir(detections_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))}
-        
-        self.filtered_images = [
-            (input_path, annotated_img)
-            for input_path, annotated_img in self.annotated_images
-            if os.path.basename(input_path) in detection_images
-        ]
-        self.show_gallery_images()
+            # Create an "output" folder inside the input folder if it doesn't exist
+            output_folder = os.path.join(input_folder, "output")
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
 
-    def filter_no_detections(self):
-        """Filter and display images without detections."""
-        no_detections_folder = os.path.join(self.output_folder, "no_detections")
-        no_detection_images = {f for f in os.listdir(no_detections_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))}
-        
-        self.filtered_images = [
-            (input_path, annotated_img)
-            for input_path, annotated_img in self.annotated_images
-            if os.path.basename(input_path) in no_detection_images
-        ]
-        self.show_gallery_images()
+            # Set the output video file path
+            self.output_video_path = os.path.join(output_folder, f"{input_filename}.mp4")
+
+            # Enable the process button
+            self.video_process_button.config(state=tk.NORMAL)
+
+    def process_video(self):
+        if not hasattr(self, 'video_input_file'):
+            messagebox.showerror("Error", "Please select a video file.")
+            return
+
+        input_video_path = self.video_input_file
+        output_video_path = self.output_video_path
+
+        if not output_video_path:
+            messagebox.showerror("Error", "Please specify an output video path.")
+            return
+
+        self.video_progress_bar["value"] = 0
+        self.video_progress_bar["maximum"] = 100
+
+        def update_progress_bar(frame_num, total_frames):
+            progress = (frame_num / total_frames) * 100
+            self.video_progress_bar["value"] = progress
+            self.root.update_idletasks()
+
+        process_video(input_video_path, output_video_path, self.model, annotate_images_batch, update_progress_bar)
+
+        messagebox.showinfo("Processing Complete", f"Video saved to {output_video_path}")
 
     def save_config(self):
         config_data = {
@@ -283,6 +344,44 @@ class YOLOv7App:
             messagebox.showinfo("Output Folder", f"Output folder set to: {folder_path}")
             self.save_config()
 
+    def calculate_images_per_row(self):
+        """Calculate the number of images that can fit in one row based on container width."""
+        self.state += 1
+        if self.state % 2 == 0:
+            self.images_per_row = 5
+        else: self.images_per_row = 11
+        print(self.images_per_row)
+        return
+
+    def show_all_images(self):
+        """Display all images in the gallery."""
+        self.filtered_images = self.annotated_images
+        self.show_gallery_images()
+
+    def filter_with_detections(self):
+        """Filter and display images with detections."""
+        detections_folder = os.path.join(self.output_folder, "detections")
+        detection_images = {f for f in os.listdir(detections_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))}
+        
+        self.filtered_images = [
+            (input_path, annotated_img)
+            for input_path, annotated_img in self.annotated_images
+            if os.path.basename(input_path) in detection_images
+        ]
+        self.show_gallery_images()
+
+    def filter_no_detections(self):
+        """Filter and display images without detections."""
+        no_detections_folder = os.path.join(self.output_folder, "no_detections")
+        no_detection_images = {f for f in os.listdir(no_detections_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))}
+        
+        self.filtered_images = [
+            (input_path, annotated_img)
+            for input_path, annotated_img in self.annotated_images
+            if os.path.basename(input_path) in no_detection_images
+        ]
+        self.show_gallery_images()
+
     def display_image(self, image, canvas_type="before"):
         canvas_width = self.before_canvas.winfo_width() if canvas_type == "before" else self.after_canvas.winfo_width()
         canvas_height = self.before_canvas.winfo_height() if canvas_type == "before" else self.after_canvas.winfo_height()
@@ -300,40 +399,6 @@ class YOLOv7App:
         canvas.delete("all")
         canvas.create_image(0, 0, image=img_tk, anchor="nw")
         canvas.image = img_tk
-
-    def process_folder(self):
-        if not self.input_folder or not self.output_folder:
-            messagebox.showerror("Error", "Please select both input and output folders in the Settings tab.")
-            return
-
-        total_images = len(self.image_paths)
-        for idx, image_path in enumerate(self.image_paths):
-            self.display_image(image_path, "before")
-
-            results = run_inference(
-                model=self.model,
-                source=image_path,
-                conf_thres=0.5,
-                iou_thres=0.45
-            )
-
-            annotated_images_batch = annotate_images_batch(results)
-
-            for path, annotated_img in annotated_images_batch:
-                detections_folder = "detections" if results[0][1] is not None else "no_detections"
-                subfolder_path = os.path.join(self.output_folder, detections_folder)
-                os.makedirs(subfolder_path, exist_ok=True)
-
-                self.display_image(annotated_img, "after")
-
-                output_path = os.path.join(subfolder_path, os.path.basename(path))
-                cv2.imwrite(output_path, annotated_img)
-
-            self.progress_bar["value"] = (idx + 1) / total_images * 100
-            self.root.update_idletasks()
-            self.show_gallery_images()
-
-        messagebox.showinfo("Processing Complete", f"Processed images saved to {self.output_folder}.")
 
     def explorer_view(self, output_image_path):
         if os.name == 'nt':

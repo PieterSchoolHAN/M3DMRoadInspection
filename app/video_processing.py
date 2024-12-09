@@ -3,43 +3,7 @@ import torch
 from yolov7.seg.segment.custom_predict import load_model, run_inference
 import os
 
-
-def annotate_image(image, detections):
-    """
-    Draw bounding boxes and labels on the image.
-    """
-    if detections is None or len(detections) == 0:
-        return image
-
-    for det in detections:
-        bbox = det[:4].tolist()
-        confidence = det[4].item()
-        cls = int(det[5].item())
-
-        x1, y1, x2, y2 = map(int, bbox)
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        label = f"Class: {cls} Conf: {confidence:.2f}"
-        label_position = (x1, y1 - 10 if y1 - 10 > 10 else y1 + 10)
-        cv2.putText(image, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-    return image
-
-
-def annotate_images_batch(results):
-    """
-    Annotate a batch of frames.
-    """
-    annotated_images = []
-
-    for path, det, _, im0s in results:
-        annotated_img = annotate_image(im0s, det)
-        annotated_images.append((path, annotated_img))
-
-    return annotated_images
-
-
-def process_video(video_path, output_video_path, model, conf_thres=0.5, iou_thres=0.45):
+def process_video(video_path, output_video_path, model, annotate_images_batch_func, update_progress_bar_func, conf_thres=0.5, iou_thres=0.45):
     """
     Process a video file, run YOLOv7 inference, and save the annotated video.
     """
@@ -50,8 +14,6 @@ def process_video(video_path, output_video_path, model, conf_thres=0.5, iou_thre
         return
 
     # Get video properties
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -82,12 +44,13 @@ def process_video(video_path, output_video_path, model, conf_thres=0.5, iou_thre
         )
 
         # Annotate the frame
-        annotated_images_batch = annotate_images_batch(results)
+        annotated_images_batch = annotate_images_batch_func(results)
         for _, annotated_frame in annotated_images_batch:
             out.write(annotated_frame)  # Write annotated frame to output video
 
         processed_frames += 1
         print(f"Processed {processed_frames}/{total_frames} frames", end="\r")
+        update_progress_bar_func(processed_frames, total_frames)
 
     # Release resources
     cap.release()
@@ -97,8 +60,11 @@ def process_video(video_path, output_video_path, model, conf_thres=0.5, iou_thre
 
 if __name__ == "__main__":
     # Example usage
-    video_path = r"C:\Users\jurri\Pictures\vid_dem\istockphoto-937868038-640_adpp_is.mp4"
-    output_video_path = r"C:\Users\jurri\Pictures\vid_dem\output\output.mp4"
+    extension = '.mp4'
+    video_path_base = r"C:\Users\jurri\Pictures\vid_dem\istockphoto-937868038-640_adpp_is"
+    output_video_path = f"{video_path_base}/output{extension}"
+    video_path = f"{video_path_base}{extension}"
+    
     model, _, _, _ = load_model(
             weights=r"yolov7\seg\runs\train-seg\custom2\weights\best.pt",
             device="cpu",
