@@ -9,33 +9,7 @@ import cv2
 from yolov7.seg.segment.custom_predict import run_inference, load_model
 from video_processing import process_video
 import json
-
-def annotate_image(image, detections):
-    if detections is None or len(detections) == 0:
-        return image
-
-    for det in detections:
-        bbox = det[:4].tolist()
-        confidence = det[4].item()
-        cls = int(det[5].item())
-
-        x1, y1, x2, y2 = map(int, bbox)
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        label = f"Class: {cls} Conf: {confidence:.2f}"
-        label_position = (x1, y1 - 10 if y1 - 10 > 10 else y1 + 10)
-        cv2.putText(image, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-    return image
-
-def annotate_images_batch(results):
-    annotated_images = []
-
-    for path, det, _, im0s in results:
-        annotated_img = annotate_image(im0s, det)
-        annotated_images.append((path, annotated_img))
-
-    return annotated_images
+from image_processing import annotate_images_batch
 
 class YOLOv7App:
     CONFIG_FILE = "config.json"
@@ -181,7 +155,6 @@ class YOLOv7App:
                 cv2.imwrite(output_path, annotated_img)
 
             self.progress_bar["value"] = (idx + 1) / total_images * 100
-            self.root.update_idletasks()
             self.show_gallery_images()
 
         messagebox.showinfo("Processing Complete", f"Processed images saved to {self.output_folder}.")
@@ -291,7 +264,6 @@ class YOLOv7App:
         def update_progress_bar(frame_num, total_frames):
             progress = (frame_num / total_frames) * 100
             self.video_progress_bar["value"] = progress
-            self.root.update_idletasks()
 
         process_video(input_video_path, output_video_path, self.model, annotate_images_batch, update_progress_bar)
 
