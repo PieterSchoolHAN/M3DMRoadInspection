@@ -1,6 +1,6 @@
 import cv2
 import torch
-from yolov7.seg.segment.custom_predict import load_model, run_inference
+from yolov7.seg.segment.modular_predict import load_model, run_inference
 import os
 
 def process_video(video_path, output_video_path, model, annotate_images_batch_func, update_progress_bar_func, conf_thres=0.5, iou_thres=0.45):

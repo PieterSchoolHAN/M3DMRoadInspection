@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk
 import cv2
-from yolov7.seg.segment.custom_predict import run_inference, load_model
+from yolov7.seg.segment.modular_predict import run_inference, load_model
 from video_processing import process_video
 import json
 
@@ -412,8 +412,6 @@ class YOLOv7App:
             self.show_gallery_images()
 
 if __name__ == "__main__":
-    from yolov7.seg.segment.custom_predict import load_model
-
     model, _, _, _ = load_model(
         weights=r"yolov7\seg\runs\train-seg\custom2\weights\best.pt",
         device="cpu",
