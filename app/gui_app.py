@@ -6,35 +6,16 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk
 import cv2
-from yolov7.seg.segment.modular_predict import run_inference, load_model
+from yolov7.seg.segment.modular_predict import run_inference, load_model, annotate_image
 from video_processing import process_video
 import json
-
-def annotate_image(image, detections):
-    if detections is None or len(detections) == 0:
-        return image
-
-    for det in detections:
-        bbox = det[:4].tolist()
-        confidence = det[4].item()
-        cls = int(det[5].item())
-
-        x1, y1, x2, y2 = map(int, bbox)
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        label = f"Class: {cls} Conf: {confidence:.2f}"
-        label_position = (x1, y1 - 10 if y1 - 10 > 10 else y1 + 10)
-        cv2.putText(image, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-    return image
 
 def annotate_images_batch(results):
     annotated_images = []
 
-    for path, det, _, im0s in results:
-        annotated_img = annotate_image(im0s, det)
-        annotated_images.append((path, annotated_img))
-
+    annotated_img = annotate_image(results, ['crack'], output_path=None)
+    for path, img in annotated_img:
+        annotated_images.append((path, img))
     return annotated_images
 
 class YOLOv7App:
@@ -415,7 +396,7 @@ if __name__ == "__main__":
     model, _, _, _ = load_model(
         weights=r"yolov7\seg\runs\train-seg\custom2\weights\best.pt",
         device="cpu",
-        data=r"yolov7\seg\crack-3\data.yaml"
+        data=r"crack-2\data.yaml"
     )
     model.eval()
 
