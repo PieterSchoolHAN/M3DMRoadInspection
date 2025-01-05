@@ -1,6 +1,9 @@
 .venv/
 yolov7/
-RoadQuality.v2i.yolov7pytorch/
-combined_dataset/
 Datasets/
-app/__pycache__
+__pycache__
+crack-2/
+test/
+config.json
+setup/
+best.pt
