@@ -1,8 +1,6 @@
 .venv/
 yolov7/
-Datasets/
 __pycache__
-crack-2/
 test/
 config.json
 setup/
