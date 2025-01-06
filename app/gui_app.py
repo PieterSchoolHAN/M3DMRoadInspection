@@ -109,7 +109,6 @@ class YOLOv7App:
         self.gallery_buttons = []
         self.state = 1
         self.calculate_images_per_row()
-        print(self.images_per_row)
         self.check_existing_images()
 
     def process_folder(self):
@@ -193,7 +192,6 @@ class YOLOv7App:
             if f.lower().endswith(IMG_FORMATS)
         ]
 
-
         all_output_images = []
 
         if os.path.exists(self.output_folder):
@@ -209,19 +207,20 @@ class YOLOv7App:
 
             if input_image in all_output_images:
                 output_path = os.path.join(self.output_folder, input_image)
+
             else:
                 input_image = Path(input_image)
                 output_path = os.path.join(self.output_folder, input_image.stem + '_no_det' + input_image.suffix)
 
-                if os.path.exists(output_path):  # Safeguard to ensure the file exists
-                    annotated_img = cv2.imread(output_path)
-                    if annotated_img is not None:  # Check if the image was read successfully
-                        output_path = Path(output_path)
-                        self.annotated_images.append((input_path, annotated_img, output_path))
-                    else:
-                        print(f"Failed to read annotated image: {output_path}")
+            if os.path.exists(output_path):  # Safeguard to ensure the file exists
+                annotated_img = cv2.imread(output_path)
+                if annotated_img is not None:  # Check if the image was read successfully
+                    output_path = Path(output_path)
+                    self.annotated_images.append((input_path, annotated_img, output_path))
                 else:
-                    print(f"Output path does not exist: {output_path}")
+                    print(f"Failed to read annotated image: {output_path}")
+            else:
+                print(f"Output path does not exist: {output_path}")
 
         self.filtered_images = self.annotated_images
         self.show_gallery_images()
